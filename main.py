@@ -1,8 +1,8 @@
-import os
-import argparse
-from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+import os # algo del sistema operativo
+import argparse # Para leer argumentos de consola
+from dotenv import load_dotenv # Para leer .env .venv (passwords, api_keys)
+from google import genai # API de gemini
+from google.genai import types # no recuerdo
 
 # --- 1. FUNCIÓN REFACTORIZADA ---
 # Esta función ahora es un "trabajador silencioso".
