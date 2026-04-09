@@ -1,4 +1,5 @@
 import os
+from google.genai import types # no recuerdo
 def get_files_info(working_directory, directory="."):
     try:
         # 1. Obtenemos la ruta absoluta de la base (la frontera)
@@ -34,3 +35,17 @@ def get_files_info(working_directory, directory="."):
     except Exception as e:
         return f"Error: {e}"
 
+# HOW TO TALK WITH GEMINI API
+schema_get_files_info = types.FunctionDeclaration(
+        name = "get_files_info",
+        description = "Lists files in a specified directory relative to the working directory.",
+        parameters = types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "directory": types.Schema(
+                    type=types.Type.STRING,
+                    description="Directory path to list files from, relative to the working directory.",
+                ),
+            },
+        ),
+)

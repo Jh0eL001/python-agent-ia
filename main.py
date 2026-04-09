@@ -3,6 +3,8 @@ import argparse # Para leer argumentos de consola
 from dotenv import load_dotenv # Para leer .env .venv (passwords, api_keys)
 from google import genai # API de gemini
 from google.genai import types # no recuerdo
+from prompts import system_prompt
+from call_function import available_functions
 
 # --- 1. FUNCIÓN REFACTORIZADA ---
 # Esta función ahora es un "trabajador silencioso".
@@ -10,7 +12,13 @@ from google.genai import types # no recuerdo
 def generate_content(client, messages):
     response = client.models.generate_content(
         model='gemini-2.5-flash',
-        contents=messages
+        contents=messages,
+        # add config object with system instruction parameter
+        config=types.GenerateContentConfig(
+            tools=[available_functions],
+            system_instruction=system_prompt,
+            temperature=0 # Para que la IA se vuelva determinista LOL
+            ),
     )
     # Validamos que la respuesta tenga metadata (importante para el backend)
     if response.usage_metadata is None:
@@ -46,9 +54,16 @@ def main():
         print(f"Prompt tokens: {usage.prompt_token_count}")
         print(f"Response tokens: {usage.candidates_token_count}")
 
-    # Esto se imprime SIEMPRE (tengas verbose o no)
+    # Accedemos a la lista de llamadas (puede ser None si no hay ninguna)
+    content = response.candidates[0].content
+    function_calls = [part.function_call for part in content.parts if part.function_call]
     print("Response:")
-    print(response.text)
+    if function_calls: # Si la lista contiene elementos...
+        for function_call in function_calls:
+            print(f"Calling function: {function_call.name}({function_call.args})")
+    else:
+        # Si no hay funciones, imprimimos el texto como antes
+        print(response.text)
 
 if __name__ == "__main__":
     main()
