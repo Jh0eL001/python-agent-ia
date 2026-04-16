@@ -1,90 +1,88 @@
 import os
-import sys
 import argparse
-from unittest.mock import MagicMock
+from dotenv import load_dotenv
+from google import genai
 from google.genai import types
-from call_function import call_function
+from prompts import system_prompt
+from call_function import available_functions, call_function
 
-# --- GENERADOR SIMULADO (MOCK) ---
-# Esta función engaña a nuestro agente haciéndole creer que habla con Gemini
-def mock_generate_content(prompt, turn):
-    response = MagicMock()
-    response.usage_metadata.prompt_token_count = 10
-    response.usage_metadata.candidates_token_count = 20
-    
-    content_mock = MagicMock()
-    part_mock = MagicMock()
-    
-    prompt_lower = prompt.lower()
-
-    # Simulamos el proceso de razonamiento paso a paso
-    if "render results" in prompt_lower:
-        if turn == 0:
-            part_mock.function_call.name = "get_files_info"
-            part_mock.function_call.args = {"directory": "."}
-        elif turn == 1:
-            part_mock.function_call.name = "get_file_content"
-            part_mock.function_call.args = {"file_path": "main.py"}
-        else:
-            part_mock.function_call = None # No más funciones
-            response.text = "The calculator uses the print() function and format_json_output() to render results to the console."
-    else:
-        # Fallback para cualquier otro test
-        if turn == 0:
-            part_mock.function_call.name = "get_files_info"
-            part_mock.function_call.args = {"directory": "."}
-        else:
-            part_mock.function_call = None
-            response.text = "Here is your mocked response."
-
-    content_mock.parts = [part_mock]
-    response.candidates = [MagicMock(content=content_mock)]
+# --- 1. FUNCIÓN DE GENERACIÓN ---
+def generate_content(client, messages):
+    response = client.models.generate_content(
+        model='gemini-2.0-flash',
+        contents=messages,
+        config=types.GenerateContentConfig(
+            tools=[available_functions],
+            system_instruction=system_prompt,
+            temperature=0
+        ),
+    )
+    if response.usage_metadata is None:
+        raise RuntimeError("Invalid API response: Missing usage_metadata.")
     return response
 
-# --- FUNCIÓN PRINCIPAL ---
+# --- 2. FUNCIÓN PRINCIPAL ---
 def main():
+    load_dotenv()
+    api_key = os.getenv("GEMINI_API_KEY")
+
+    # Configuración de Argparse
     parser = argparse.ArgumentParser(description="AI Agent CLI")
     parser.add_argument("user_prompt", type=str, help="The prompt for the AI agent")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
 
-    # 1. Iniciamos el historial de conversación (memoria del agente)
+    if api_key is None:
+        raise RuntimeError("GEMINI_API_KEY no encontrada en el entorno")
+
+    # Inicialización del cliente
+    client = genai.Client(api_key=api_key)
+
+    # Preparamos el mensaje inicial del usuario
     messages = [types.Content(role="user", parts=[types.Part(text=args.user_prompt)])]
 
-    mock_turn = 0 # Contador para saber en qué paso del engaño estamos
+    # Llamamos a la IA
+    response = generate_content(client, messages)
+    usage = response.usage_metadata
 
-    # 2. EL AGENT LOOP (Máximo 20 iteraciones según el assignment)
-    for _ in range(20):
-        # LLAMADA A LA IA SIMULADA (0 tokens gastados)
-        response = mock_generate_content(args.user_prompt, mock_turn)
-        mock_turn += 1
+    # Lógica Verbose para tokens
+    if args.verbose:
+        print(f"User prompt: {args.user_prompt}")
+        print(f"Prompt tokens: {usage.prompt_token_count}")
+        print(f"Response tokens: {usage.candidates_token_count}")
 
-        # 3. Guardar lo que la IA respondió en la memoria
-        if response.candidates:
-            candidate_content = response.candidates[0].content
-            messages.append(candidate_content)
+    # Procesamos la respuesta del modelo
+    content = response.candidates[0].content
+    # Extraemos todas las llamadas a funciones de las 'parts'
+    function_calls = [part.function_call for part in content.parts if part.function_call]
 
-        # 4. Revisar si la IA quiere llamar a alguna herramienta
-        function_calls = [part.function_call for part in candidate_content.parts if part.function_call]
+    print("Response:")
 
-        if function_calls:
-            function_responses = []
-            for fc in function_calls:
-                # Ejecutamos nuestra función local REAL
-                function_call_result = call_function(fc, verbose=args.verbose)
-                function_responses.append(function_call_result.parts[0])
-            
-            # 5. Guardar la respuesta de la herramienta en la memoria con role="user"
-            messages.append(types.Content(role="user", parts=function_responses))
-        else:
-            # 6. Condición de salida: No hay funciones, imprimir y salir
-            print("Final response:")
-            print(response.text)
-            return  # Rompe el bucle con éxito
+    if function_calls:
+        function_results = []
+        for fc in function_calls:
+            # Ejecutamos la función físicamente en nuestra máquina
+            function_call_result = call_function(fc, verbose=args.verbose)
 
-    # Si llega a 20 vueltas y no termina, falla (según assignment)
-    print("Error: Maximum iterations reached without a final response.")
-    sys.exit(1)
+            # Validaciones de seguridad de Boot.dev
+            if not function_call_result.parts:
+                raise RuntimeError("Function call result has no parts.")
+
+            f_res = function_call_result.parts[0].function_response
+            if f_res is None:
+                raise RuntimeError("FunctionResponse is None.")
+            if f_res.response is None:
+                raise RuntimeError("FunctionResponse.response is None.")
+
+            # Guardamos el resultado (se usará en el siguiente sprint para el loop)
+            function_results.append(function_call_result.parts[0])
+
+            # En modo verbose imprimimos el retorno de la función de Python
+            if args.verbose:
+                print(f"-> {f_res.response}")
+    else:
+        # Si no hubo intención de usar herramientas, imprimimos el texto de la IA
+        print(response.text)
 
 if __name__ == "__main__":
     main()
