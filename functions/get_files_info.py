@@ -49,3 +49,59 @@ schema_get_files_info = types.FunctionDeclaration(
             },
         ),
 )
+
+# Herramienta para leer contenido
+schema_get_file_content = types.FunctionDeclaration(
+    name="get_file_content",
+    description="Reads the content of a specific file.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The path to the file to read, relative to the working directory."
+            ),
+        },
+        required=["file_path"]
+    ),
+)
+
+# Herramienta para ejecutar código Python
+schema_run_python_file = types.FunctionDeclaration(
+    name="run_python_file",
+    description="Executes a Python file with optional command-line arguments.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The path to the Python file to execute."
+            ),
+            "args": types.Schema(
+                type=types.Type.STRING,
+                description="Optional command-line arguments to pass to the script."
+            ),
+        },
+        required=["file_path"]
+    ),
+)
+
+# Herramienta para escribir o crear archivos
+schema_write_file = types.FunctionDeclaration(
+    name="write_file",
+    description="Creates or overwrites a file with the specified content.",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The path where the file will be written."
+            ),
+            "content": types.Schema(
+                type=types.Type.STRING,
+                description="The text content to write into the file."
+            ),
+        },
+        required=["file_path", "content"]
+    ),
+)
